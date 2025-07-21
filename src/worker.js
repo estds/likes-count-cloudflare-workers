@@ -137,8 +137,8 @@ function validateAndNormalizeUrl(urlString) {
       return null;
     }
 
-    // Normalize: lowercase domain, remove trailing slash, remove query parameters
-    const normalizedUrl = `${url.protocol}//${url.hostname.toLowerCase()}${url.pathname.replace(/\/$/, '') || '/'}`;
+    // Normalize: lowercase domain, remove http/https protocol and trailing slash, remove query parameters
+    const normalizedUrl = `${url.hostname.toLowerCase()}${url.pathname.replace(/\/$/, "") || "/"}`;
     
     return normalizedUrl;
   } catch (error) {
