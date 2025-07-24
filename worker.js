@@ -21,10 +21,10 @@ export default {
     try {
       // Root endpoint
       if (path === '/' && request.method === 'GET') {
-        return new Response('hello and welcome', {
+        return new Response('Hello and welcome! Check out <a href="https://github.com/estds/likes-count-cloudflare-workers">this github repo</a> for use.', {
           status: 200,
           headers: {
-            'Content-Type': 'text/plain',
+            'Content-Type': 'text/html',
             ...corsHeaders,
           },
         });
