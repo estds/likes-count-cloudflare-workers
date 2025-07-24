@@ -1,30 +1,16 @@
-# URL Tracker Cloudflare Worker
+# Likes count by Cloudflare Worker
 
 A Cloudflare Worker API for tracking URL likes using D1 database.
 
-## Project Structure
-
-```
-/
-├── src/
-│   └── worker.js          # Main worker script
-├── migrations/
-│   └── 0001_initial.sql   # Database schema
-├── wrangler.toml          # Cloudflare configuration
-├── package.json           # Node.js dependencies
-└── README.md             # This file
-```
 
 ## Features
 
 - **GET** `/` - Returns welcome message
 - **POST** `/api?method=read` - Read URL likes (creates entry if not exists with likes=0)  
 - **POST** `/api?method=update` - Increment URL likes (creates entry if not exists with likes=1)
-- Base64 URL encoding/decoding
-- URL validation (http/https only)
-- URL normalization (lowercase domain, remove trailing slash, remove query params)
 - CORS support for cross-origin requests
 - D1 database integration
+- Maxium likes: 100,000
 
 ## API Examples
 
@@ -32,162 +18,135 @@ A Cloudflare Worker API for tracking URL likes using D1 database.
 ```bash
 curl -X POST "https://your-worker.your-subdomain.workers.dev/api?method=read" \
   -H "Content-Type: application/json" \
-  -d '{"url":"aHR0cHM6Ly9leGFtcGxlLmNvbS9hcnRpY2xl"}'
+  -d '{"url":"https://example.com/article"}'
 ```
 
 ### Update URL likes  
 ```bash
 curl -X POST "https://your-worker.your-subdomain.workers.dev/api?method=update" \
   -H "Content-Type: application/json" \
-  -d '{"url":"aHR0cHM6Ly9leGFtcGxlLmNvbS9hcnRpY2xl"}'
+  -d '{"url":"https://example.com/article"}'
 ```
-
-*Note: `aHR0cHM6Ly9leGFtcGxlLmNvbS9hcnRpY2xl` is base64 encoded `https://example.com/article`*
 
 ### Response Format
 
-**Success:**
-```json
+#### Sucessful read or update
+
+```bash
 {
-  "status": "200",
-  "url": "https://example.com/article",
+  "success": true,
+  "url": "example.com/my-page",
   "likes": 42
 }
 ```
 
-**Invalid URL:**
-```json
+#### Errors
+
+```bash
 {
-  "status": "204", 
-  "url": null,
-  "likes": null
+  "success": false,
+  "message": "<Human readable error message>"
 }
 ```
 
+
 ## Setup and Deployment
 
-### Prerequisites
 
-- Node.js 18+ installed
-- Cloudflare account
-- Wrangler CLI installed globally: `npm install -g wrangler`
+### Step 1: Login to Cloudflare
 
-### Step 1: Clone and Install
+Go to `https://dash.cloudflare.com` and login to your account.
 
-```bash
-git clone <your-repo-url>
-cd url-tracker-worker
-npm install
+### Step 2: Create D1 Database
+
+Go to D1 database, and add a new database.
+
+In the console of the database, use the following commands to create a single table called `data` with two columns: `url` (TEXT type with UNIQUE and NOT NULL constraints) and `likes` (INTEGER type with default value 0).
+
+```sql
+CREATE TABLE data (
+    url TEXT UNIQUE NOT NULL,
+    likes INTEGER DEFAULT 0
+);
 ```
 
-### Step 2: Login to Cloudflare
+### Step 3: Create worker
 
-```bash
-wrangler login
-```
+Go to workers page and create a new one.
 
-### Step 3: Create D1 Database
+Add the following database binding:
 
-```bash
-# Create the database
-wrangler d1 create url-tracker-db
-```
+| Type | Name | Value |
+| --- | --- | --- |
+| D1 database | `DB` | `<database-created-in-step2>` |
 
-This will output a database ID. Copy it and update the `database_id` field in `wrangler.toml`:
+### Step 4: Edit worker code and deploy
 
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "url-tracker-db"
-database_id = "YOUR_DATABASE_ID_HERE"
-```
+Copy-paste the content of 'worker.js' into the worker and deploy.
 
-### Step 4: Run Database Migrations
+### Step 5: Set up custom domain (optional)
 
-```bash
-# Apply migrations to remote database
-npm run db:migrate
+Set up custom domain if needed.
 
-# Or apply to local database for development
-npm run db:migrate:local
-```
 
-### Step 5: Deploy
+## Same Domain Protection (optional)
 
-```bash
-# Deploy to production
-npm run deploy
+To avoid abussive use, apart from CloudFlare's built-in rate limit, a same-domain protection could be applied.
 
-# Or deploy to staging environment
-npm run deploy:staging
-```
+To enable this feature, set up the following environmental variable in the worker:
 
-### Step 6: Test Your Worker
+| Name | Value |
+| --- | --- |
+| `SAME_DOMAIN_PROTECTION` | `true` |
 
-Once deployed, Wrangler will provide your worker URL. Test it:
+If `SAME_DOMAIN_PROTECTION` is not set or set to `false`, this feature is disabled.
 
-```bash
-# Test welcome endpoint
-curl https://your-worker.your-subdomain.workers.dev/
+When same domain protection is enabled, requests could only be made for domain(s) same to the custom domain(s) set up for the worker. Requests made to the default CloudFlare domain would be blocked. For instance:
 
-# Test API with base64 encoded URL
-curl -X POST "https://your-worker.your-subdomain.workers.dev/api?method=read" \
-  -H "Content-Type: application/json" \
-  -d '{"url":"aHR0cHM6Ly9leGFtcGxlLmNvbQ=="}'
-```
-
-## Development
-
-### Local Development
-
-```bash
-# Start local development server
-npm run dev
-```
-
-This starts the worker at `http://localhost:8787` with hot reloading.
-
-### Database Commands
-
-```bash
-# Create database  
-npm run db:create
-
-# Apply migrations to remote database
-npm run db:migrate
-
-# Apply migrations to local database
-npm run db:migrate:local
-
-# Execute SQL commands on remote database
-npm run db:console "SELECT * FROM urls LIMIT 10"
-
-# Execute SQL commands on local database  
-npm run db:console:local "SELECT * FROM urls LIMIT 10"
-```
-
-## URL Normalization
-
-The API normalizes URLs by:
-
-1. Converting domain to lowercase
-2. Removing trailing slashes
-3. Removing query parameters  
-4. Keeping only the protocol, domain, and path
-
-Examples:
-- `HTTPS://Example.COM/Article/?param=1` → `https://example.com/article`
-- `http://site.com/page/` → `http://site.com/page`
+- ✅ Host: `likes.mysite.com` + URL: `https://www.mysite.com/page` → **Allowed**
+- ❌ Host: `likes.mysite.com` + URL: `https://other.com/page` → **Blocked**
+- ❌ Host: `my-worker.workers.dev` + any URL → **Blocked**
+- Returns HTTP 403 with message: "Domain not allowed"
 
 ## Error Handling
 
-The API handles various error cases:
+### 🌐 **HTTP Method & Endpoint Errors**
 
-- Invalid JSON in request body → 400 error
-- Missing URL parameter → 400 error  
-- Invalid base64 encoding → 204 response (invalid URL format)
-- Invalid URL protocol → 204 response (invalid URL format)
-- Database errors → 500 error
+* **Non-POST request to /api endpoint**: `405 - "Method not allowed. Only POST requests are accepted."`
+* **Request to non-existent endpoint**: `404 - "Endpoint not found"`
+
+### 📋 **Request Parameter Errors**
+
+* **Missing method query parameter**: `400 - "Missing required query parameter: method"`
+* **Invalid method parameter (not read/update)**: `400 - "Invalid method. Must be \"read\" or \"update\""`
+
+### 📄 **Request Body Errors**
+
+* **Empty request body**: `400 - "Request body cannot be empty"`
+* **Malformed JSON in request body**: `400 - "Invalid JSON in request body"`
+* **Missing url field in JSON**: `400 - "Missing or invalid \"url\" field in request body"`
+* **Non-string url field**: `400 - "Missing or invalid \"url\" field in request body"`
+
+### 🔒 **Domain Protection Errors** (when `SAME_DOMAIN_PROTECTION=true`)
+
+* **Cross-domain request**: `403 - "Domain not allowed"`
+* **Request from *.workers.dev domain**: `403 - "Domain not allowed"`
+* **Missing Host header**: `403 - "Domain not allowed"`
+* **Invalid URL format during domain check**: `403 - "Domain not allowed"`
+
+### 🔗 **URL Validation Errors**
+
+* **Malformed URL format**: `400 - "Malformed URL"`
+* **Non-HTTP/HTTPS protocol (ftp, file, etc.)**: `400 - "Invalid protocol. Only http and https are allowed"`
+* **URL exceeds 65,536 characters**: `400 - "URL exceeds maximum length of 65,536 characters"`
+* **URL becomes empty after processing**: `400 - "Processed URL cannot be empty"`
+
+### 💾 **Database & System Errors**
+
+* **Database connection failure**: `500 - "Database operation failed"`
+* **Database timeout**: `500 - "Database operation failed"`
+* **Database query error**: `500 - "Database operation failed"`
+* **Unexpected runtime error**: `500 - "Internal server error"`
 
 ## CORS Support
 
