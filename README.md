@@ -82,7 +82,7 @@ Add the following database binding:
 
 ### Step 4: Edit worker code and deploy
 
-Copy-paste the content of 'worker.js' into the worker and deploy.
+Copy-paste the content of [worker.js](worker.js) into the worker and deploy.
 
 ### Step 5: Set up custom domain (optional)
 
