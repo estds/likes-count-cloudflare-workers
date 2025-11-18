@@ -10,7 +10,8 @@ A Cloudflare Worker API for tracking URL likes using D1 database.
 - **POST** `/api?method=update` - Increment URL likes (creates entry if not exists with likes=1)
 - CORS support for cross-origin requests
 - D1 database integration
-- Maxium likes: 100,000
+- Maximum likes: 100,000
+- Optional domain whitelist protection
 
 ## API Examples
 
@@ -30,9 +31,9 @@ curl -X POST "https://your-worker.your-subdomain.workers.dev/api?method=update" 
 
 ### Response Format
 
-#### Sucessful read or update
+#### Successful read or update
 
-```bash
+```json
 {
   "success": true,
   "url": "example.com/my-page",
@@ -42,7 +43,7 @@ curl -X POST "https://your-worker.your-subdomain.workers.dev/api?method=update" 
 
 #### Errors
 
-```bash
+```json
 {
   "success": false,
   "message": "<Human readable error message>"
@@ -89,24 +90,51 @@ Copy-paste the content of [worker.js](worker.js) into the worker and deploy.
 Set up custom domain if needed.
 
 
-## Same Domain Protection (optional)
+## Domain Protection (optional)
 
-To avoid abussive use, apart from CloudFlare's built-in rate limit, a same-domain protection could be applied.
+To prevent abusive use, apart from Cloudflare's built-in rate limit, you can restrict which domains are allowed to track likes.
 
-To enable this feature, set up the following environmental variable in the worker:
+### Configuration
+
+Set the following environment variable in the worker:
 
 | Name | Value |
 | --- | --- |
-| `SAME_DOMAIN_PROTECTION` | `true` |
+| `ALLOWED_DOMAINS` | Comma-separated list of allowed domains |
 
-If `SAME_DOMAIN_PROTECTION` is not set or set to `false`, this feature is disabled.
+### Examples
 
-When same domain protection is enabled, requests could only be made for domain(s) same to the custom domain(s) set up for the worker. Requests made to the default CloudFlare domain would be blocked. For instance:
+**Single domain:**
+```
+ALLOWED_DOMAINS = "example.com"
+```
 
-- ✅ Host: `likes.mysite.com` + URL: `https://www.mysite.com/page` → **Allowed**
-- ❌ Host: `likes.mysite.com` + URL: `https://other.com/page` → **Blocked**
-- ❌ Host: `my-worker.workers.dev` + any URL → **Blocked**
-- Returns HTTP 403 with message: "Domain not allowed"
+**Multiple domains:**
+```
+ALLOWED_DOMAINS = "example.com,mysite.org,another.net"
+```
+
+**Open access (no protection):**
+- Don't set `ALLOWED_DOMAINS`, or
+- Leave it empty
+
+### How it works
+
+- **Root domain matching**: Subdomains are automatically matched to their root domain
+  - If you allow `example.com`, requests for `blog.example.com`, `www.example.com`, and `example.com` are all allowed
+- **Workers.dev blocking**: When domain protection is enabled, requests to `*.workers.dev` domains are automatically blocked
+- **Case insensitive**: Domain matching is case-insensitive
+- **Whitespace tolerant**: Spaces around commas are automatically trimmed
+
+### Examples
+
+With `ALLOWED_DOMAINS = "example.com,mysite.org"`:
+
+- ✅ URL: `https://example.com/page` → **Allowed**
+- ✅ URL: `https://blog.example.com/post` → **Allowed**
+- ✅ URL: `https://www.mysite.org/article` → **Allowed**
+- ❌ URL: `https://other.com/page` → **Blocked** (403 - "Domain not allowed")
+- ❌ URL: `https://my-worker.workers.dev/test` → **Blocked** (403 - "Domain not allowed")
 
 ## Error Handling
 
@@ -127,11 +155,10 @@ When same domain protection is enabled, requests could only be made for domain(s
 * **Missing url field in JSON**: `400 - "Missing or invalid \"url\" field in request body"`
 * **Non-string url field**: `400 - "Missing or invalid \"url\" field in request body"`
 
-### 🔒 **Domain Protection Errors** (when `SAME_DOMAIN_PROTECTION=true`)
+### 🔒 **Domain Protection Errors** (when `ALLOWED_DOMAINS` is set)
 
-* **Cross-domain request**: `403 - "Domain not allowed"`
-* **Request from *.workers.dev domain**: `403 - "Domain not allowed"`
-* **Missing Host header**: `403 - "Domain not allowed"`
+* **Domain not in allowed list**: `403 - "Domain not allowed"`
+* **Request to *.workers.dev domain**: `403 - "Domain not allowed"`
 * **Invalid URL format during domain check**: `403 - "Domain not allowed"`
 
 ### 🔗 **URL Validation Errors**
